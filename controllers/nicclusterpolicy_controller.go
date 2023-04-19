@@ -79,7 +79,6 @@ type NicClusterPolicyReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *NicClusterPolicyReconciler) Reconcile(_ context.Context, req ctrl.Request) (ctrl.Result, error) {
-	fmt.Println("!!!!!! START !!!!!!!!!")
 	reqLogger := r.Log.WithValues("nicclusterpolicy", req.NamespacedName)
 	reqLogger.V(consts.LogLevelInfo).Info("Reconciling NicClusterPolicy")
 
@@ -281,7 +280,7 @@ func (r *NicClusterPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		ctl = ctl.Watches(ws[i], &proxyEnque{handler.EnqueueRequestForOwner{
 			IsController: true,
 			OwnerType:    &mellanoxv1alpha1.NicClusterPolicy{},
-		}})
+		}}, builder.WithPredicates(IgnoreSameContentPredicate{}))
 	}
 
 	return ctl.Complete(r)
