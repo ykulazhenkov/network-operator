@@ -78,6 +78,7 @@ type NicClusterPolicyReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *NicClusterPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	fmt.Println("!!!!!! START !!!!!!!!!")
 	reqLogger := r.Log.WithValues("nicclusterpolicy", req.NamespacedName)
 	reqLogger.V(consts.LogLevelInfo).Info("Reconciling NicClusterPolicy")
 
@@ -143,7 +144,7 @@ func (r *NicClusterPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			RequeueAfter: time.Duration(config.FromEnv().Controller.RequeueTimeSeconds) * time.Second,
 		}, nil
 	}
-
+	fmt.Println("!!!!!! END !!!!!!!!!")
 	return ctrl.Result{}, nil
 }
 
@@ -276,11 +277,24 @@ func (r *NicClusterPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	ws := stateManager.GetWatchSources()
 	r.Log.V(consts.LogLevelInfo).Info("Watch Sources", "Kind:", ws)
 	for i := range ws {
-		ctl = ctl.Watches(ws[i], &handler.EnqueueRequestForOwner{
+		ctl = ctl.Watches(ws[i], &proxyEnque{handler.EnqueueRequestForOwner{
 			IsController: true,
 			OwnerType:    &mellanoxv1alpha1.NicClusterPolicy{},
-		})
+		}})
 	}
 
 	return ctl.Complete(r)
+}
+
+type proxyEnque struct {
+	handler.EnqueueRequestForOwner
+}
+
+func (e *proxyEnque) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
+	fmt.Printf("!!!!!!!!!! OLD: %s, NEW: %s NAME: %s KIND: %s \n",
+		evt.ObjectOld.GetResourceVersion(),
+		evt.ObjectNew.GetResourceVersion(), evt.ObjectNew.GetName(),
+		evt.ObjectNew.GetObjectKind().GroupVersionKind().Kind)
+
+	e.EnqueueRequestForOwner.Update(evt, q)
 }
