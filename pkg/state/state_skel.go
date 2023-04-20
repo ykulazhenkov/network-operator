@@ -170,6 +170,8 @@ func (s *stateSkel) updateObj(obj *unstructured.Unstructured) error {
 	if err := s.client.Update(context.TODO(), desired); err != nil {
 		return errors.Wrap(err, "failed to update resource")
 	}
+	fmt.Printf("!!!!!! AFTER: %s !!!!!!!!! name: %s kind: %s  \n", desired.GetResourceVersion(),
+		desired.GetName(), desired.GetObjectKind().GroupVersionKind().Kind)
 	log.V(consts.LogLevelInfo).Info("Object updated successfully")
 	return nil
 }
@@ -202,6 +204,9 @@ func (s *stateSkel) createOrUpdateObjs(
 			// Some error occurred
 			return err
 		}
+
+		fmt.Printf("!!!!!! BEFORE: %s !!!!!!!!! name: %s kind: %s \n",
+			currentObj.GetResourceVersion(), currentObj.GetName(), currentObj.GetObjectKind().GroupVersionKind().Kind)
 
 		if err := s.mergeObjects(desiredObj, currentObj); err != nil {
 			return err
