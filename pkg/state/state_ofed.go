@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/NVIDIA/k8s-operator-libs/pkg/upgrade"
 	"github.com/go-logr/logr"
 	osconfigv1 "github.com/openshift/api/config/v1"
 	"github.com/pkg/errors"
@@ -139,10 +140,12 @@ type additionalVolumeMounts struct {
 
 type ofedRuntimeSpec struct {
 	runtimeSpec
-	CPUArch        string
-	OSName         string
-	OSVer          string
-	MOFEDImageName string
+	CPUArch            string
+	OSName             string
+	OSVer              string
+	MOFEDImageName     string
+	SafeLoadEnable     bool
+	SafeLoadAnnotation string
 }
 
 type ofedManifestRenderData struct {
@@ -434,6 +437,9 @@ func (s *stateOFED) getManifestObjects(
 			OSName:         nodeAttr[nodeinfo.AttrTypeOSName],
 			OSVer:          nodeAttr[nodeinfo.AttrTypeOSVer],
 			MOFEDImageName: s.getMofedDriverImageName(cr, nodeAttr, reqLogger),
+			SafeLoadEnable: cr.Spec.OFEDDriver.OfedUpgradePolicy != nil &&
+				cr.Spec.OFEDDriver.OfedUpgradePolicy.SafeLoad,
+			SafeLoadAnnotation: upgrade.GetUpgradeDriverWaitForSafeLoadAnnotationKey(),
 		},
 		Tolerations:            cr.Spec.Tolerations,
 		NodeAffinity:           cr.Spec.NodeAffinity,

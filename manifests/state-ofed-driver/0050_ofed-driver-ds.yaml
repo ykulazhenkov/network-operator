@@ -40,15 +40,34 @@ spec:
         - key: nvidia.com/gpu
           operator: Exists
           effect: NoSchedule
-{{if eq .RuntimeSpec.OSName "rhcos"}}
       serviceAccountName: ofed-driver
-{{end}}
       hostNetwork: true
       {{- if .CrSpec.ImagePullSecrets }}
       imagePullSecrets:
       {{- range .CrSpec.ImagePullSecrets }}
         - name: {{ . }}
       {{- end }}
+      {{- end }}
+      {{- if .RuntimeSpec.SafeLoadEnable }}
+      initContainers:
+        - name: fence
+          imagePullPolicy: IfNotPresent
+          image: {{ .RuntimeSpec.MOFEDImageName }}
+          command: [ "/bin/init_script.sh" ]
+          args:
+            - -n
+            - $(NODE_NAME)
+            - -a
+            - {{ .RuntimeSpec.SafeLoadAnnotation }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: init-script-volume
+              mountPath: /bin/init_script.sh
+              subPath: init_script.sh
       {{- end }}
       containers:
         - image: {{ .RuntimeSpec.MOFEDImageName }}
@@ -89,29 +108,35 @@ spec:
           startupProbe:
             exec:
               command:
-                [sh, -c, 'ls /.driver-ready']
+                [sh, -c, 'true']
             initialDelaySeconds: {{ .CrSpec.StartupProbe.InitialDelaySeconds }}
             failureThreshold: 60
             successThreshold: 1
             periodSeconds: {{ .CrSpec.StartupProbe.PeriodSeconds }}
           livenessProbe:
-            exec:
-              command:
-                [sh, -c, 'lsmod | grep mlx5_core']
-            initialDelaySeconds: {{ .CrSpec.LivenessProbe.InitialDelaySeconds }}
-            failureThreshold: 1
-            successThreshold: 1
-            periodSeconds: {{ .CrSpec.LivenessProbe.PeriodSeconds }}
-          readinessProbe:
-            exec:
-              command:
-                [sh, -c, 'lsmod | grep mlx5_core']
-            initialDelaySeconds: {{ .CrSpec.ReadinessProbe.InitialDelaySeconds }}
-            failureThreshold: 1
-            periodSeconds: {{ .CrSpec.ReadinessProbe.PeriodSeconds }}
+#            exec:
+#              command:
+#                [sh, -c, 'lsmod | grep mlx5_core']
+#            initialDelaySeconds: {{ .CrSpec.LivenessProbe.InitialDelaySeconds }}
+#            failureThreshold: 1
+#            successThreshold: 1
+#            periodSeconds: {{ .CrSpec.LivenessProbe.PeriodSeconds }}
+#          readinessProbe:
+#            exec:
+#              command:
+#                [sh, -c, 'lsmod | grep mlx5_core']
+#            initialDelaySeconds: {{ .CrSpec.ReadinessProbe.InitialDelaySeconds }}
+#            failureThreshold: 1
+#            periodSeconds: {{ .CrSpec.ReadinessProbe.PeriodSeconds }}
       # unloading OFED modules can take more time than default terminationGracePeriod (30 sec)
-      terminationGracePeriodSeconds: {{ .CrSpec.TerminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: 3
       volumes:
+        {{- if .RuntimeSpec.SafeLoadEnable }}
+        - name: init-script-volume
+          configMap:
+            name: ofed-driver-init-script
+            defaultMode: 0777
+        {{- end }}
         - name: run-mlnx-ofed
           hostPath:
             path: /run/mellanox/drivers

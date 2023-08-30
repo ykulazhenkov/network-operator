@@ -100,6 +100,9 @@ type DriverUpgradePolicySpec struct {
 	// +optional
 	// +kubebuilder:default:=false
 	AutoUpgrade bool `json:"autoUpgrade,omitempty"`
+	// Enable safe load for the driver
+	// +kubebuilder:default:=false
+	SafeLoad bool `json:"safeLoad,omitempty"`
 	// MaxParallelUpgrades indicates how many nodes can be upgraded in parallel
 	// 0 means no limit, all nodes will be upgraded in parallel
 	// +optional

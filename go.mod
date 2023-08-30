@@ -104,4 +104,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
 
-replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible
+replace (
+	github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible
+	github.com/NVIDIA/k8s-operator-libs => ../k8s-operator-libs
+	)

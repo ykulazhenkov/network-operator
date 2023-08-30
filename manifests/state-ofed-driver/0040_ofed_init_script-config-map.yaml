@@ -1,0 +1,107 @@
+# 2023 NVIDIA CORPORATION & AFFILIATES
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+{{if .RuntimeSpec.SafeLoadEnable }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ofed-driver-init-script
+  namespace: {{ .RuntimeSpec.Namespace }}
+data:
+  init_script.sh: |-
+    #!/bin/bash
+    
+    set -o pipefail
+    
+    NODE_NAME=""
+    ANNOTATION=""
+    
+    K8S_API_URL="https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT"
+    CA_CERT_PATH="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    TOKEN_PATH="/var/run/secrets/kubernetes.io/serviceaccount/token"
+    TOKEN=$(cat $TOKEN_PATH)
+    
+    while getopts ':n:a:h' opt; do
+      case "$opt" in
+        n)
+          NODE_NAME="$OPTARG"
+          ;;
+    
+        a)
+          ANNOTATION="$OPTARG"
+          ;;
+    
+        h)
+          print_usage
+          exit 0
+          ;;
+    
+        :)
+          echo -e "option requires an argument.\n"
+          print_usage
+          exit 1
+          ;;
+    
+        ?)
+          echo -e "Invalid command option.\n"
+          print_usage
+          exit 1
+          ;;
+      esac
+    done
+    shift "$(($OPTIND -1))"
+    
+    print_usage() {
+        echo -e "Usage: $(basename $0) -n <node-name> -a <annotation>"
+    }
+    
+    
+    if [ -z "$NODE_NAME" ]; then
+      echo -e "-n (node-name) is required argument.\n"
+      print_usage
+      exit 1
+    fi
+    
+    if [ -z "$ANNOTATION" ]; then
+      echo -e "-a (annotation) is required argument.\n"
+      print_usage
+      exit 1
+    fi
+    
+    
+    echo -e "set annotation $ANNOTATION on node $NODE_NAME"
+    
+    curl -X PATCH -s --cacert $CA_CERT_PATH  --header "Authorization: Bearer $TOKEN" \
+         --header "Content-Type: application/merge-patch+json" \
+         --data "{\"metadata\": {\"annotations\":{\"$ANNOTATION\": \"true\"}}}" \
+         "$K8S_API_URL"/api/v1/nodes/"$NODE_NAME"
+    if [ $? -ne 0 ]; then
+      echo -e "failed to set annotation $ANNOTATION for node $NODE_NAME, exit"
+      exit 1
+    fi
+    
+    while true; do
+        sleep 5
+        echo -e "wait for annotation removal"
+        out=$(curl -X GET -s --cacert $CA_CERT_PATH --header "Authorization: Bearer $TOKEN" \
+             "$K8S_API_URL"/api/v1/nodes/"$NODE_NAME")
+        if [ $? -ne 0 ]; then
+          echo -e "failed to get node $NODE_NAME from the API, exit"
+          exit 1
+        fi
+        if ! echo "$out" | grep -q "$ANNOTATION"; then
+            echo -e "annotation $ANNOTATION removed from the $NODE_NAME, exit"
+            exit 0
+        fi
+    done
+{{end}}

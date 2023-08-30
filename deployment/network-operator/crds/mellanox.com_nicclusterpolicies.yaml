@@ -529,6 +529,10 @@ spec:
                           will be upgraded in parallel
                         minimum: 0
                         type: integer
+                      safeLoad:
+                        default: false
+                        description: Enable safe load for the driver
+                        type: boolean
                       waitForCompletion:
                         description: WaitForCompletionSpec describes the configuration
                           for waiting on job completions

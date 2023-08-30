@@ -50,7 +50,7 @@ import (
 type UpgradeReconciler struct {
 	client.Client
 	Scheme                   *runtime.Scheme
-	StateManager             *upgrade.ClusterUpgradeStateManager
+	StateManager             upgrade.ClusterUpgradeStateManager
 	NodeUpgradeStateProvider upgrade.NodeUpgradeStateProvider
 }
 
