@@ -458,6 +458,32 @@ spec:
                     items:
                       type: string
                     type: array
+                  initContainer:
+                    description: Contains spec for the init container
+                    properties:
+                      enable:
+                        default: false
+                        description: Enable indicates if init container deployment
+                          is requried
+                        type: boolean
+                      image:
+                        pattern: '[a-zA-Z0-9\-]+'
+                        type: string
+                      imagePullSecrets:
+                        items:
+                          type: string
+                        type: array
+                      repository:
+                        pattern: '[a-zA-Z0-9\.\-\/]+'
+                        type: string
+                      version:
+                        pattern: '[a-zA-Z0-9\.-]+'
+                        type: string
+                    required:
+                    - image
+                    - repository
+                    - version
+                    type: object
                   livenessProbe:
                     description: Pod liveness probe settings
                     properties:
@@ -555,6 +581,11 @@ spec:
                           will be upgraded in parallel
                         minimum: 0
                         type: integer
+                      safeLoad:
+                        default: false
+                        description: SafeLoad turn on safe driver loading (cordon
+                          and drain the node before loading the driver)
+                        type: boolean
                       waitForCompletion:
                         description: WaitForCompletionSpec describes the configuration
                           for waiting on job completions

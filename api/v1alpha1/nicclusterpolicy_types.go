@@ -67,8 +67,19 @@ type ConfigMapNameReference struct {
 	Name string `json:"name,omitempty"`
 }
 
+// InitContainerSpec contains configuration for the init container of the OFED driver
+type InitContainerSpec struct {
+	// Enable indicates if init container deployment is requried
+	// +optional
+	// +kubebuilder:default:=false
+	Enable    bool `json:"enable,omitempty"`
+	ImageSpec `json:""`
+}
+
 // OFEDDriverSpec describes configuration options for OFED driver
 type OFEDDriverSpec struct {
+	// Contains spec for the init container
+	InitContainer *InitContainerSpec `json:"initContainer,omitempty"`
 	// Image information for ofed driver container
 	ImageSpec `json:""`
 	// Pod startup probe settings
@@ -108,6 +119,10 @@ type DriverUpgradePolicySpec struct {
 	MaxParallelUpgrades int                    `json:"maxParallelUpgrades,omitempty"`
 	WaitForCompletion   *WaitForCompletionSpec `json:"waitForCompletion,omitempty"`
 	DrainSpec           *DrainSpec             `json:"drain,omitempty"`
+	// SafeLoad turn on safe driver loading (cordon and drain the node before loading the driver)
+	// +optional
+	// +kubebuilder:default:=false
+	SafeLoad bool `json:"safeLoad,omitempty"`
 }
 
 // WaitForCompletionSpec describes the configuration for waiting on job completions
