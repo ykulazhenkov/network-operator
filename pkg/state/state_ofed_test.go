@@ -78,6 +78,67 @@ var _ = Describe("MOFED state test", func() {
 		})
 	})
 
+	Context("Init container", func() {
+		It("Merge ImagePullSecrets", func() {
+			cr := &v1alpha1.NicClusterPolicy{
+				Spec: v1alpha1.NicClusterPolicySpec{
+					OFEDDriver: &v1alpha1.OFEDDriverSpec{
+						ImageSpec: v1alpha1.ImageSpec{
+							ImagePullSecrets: []string{"1", "2", "3"},
+						},
+						InitContainer: &v1alpha1.InitContainerSpec{
+							ImageSpec: v1alpha1.ImageSpec{
+								ImagePullSecrets: []string{"A", "1", "B", "2", "3", "C"},
+							}},
+					},
+				},
+			}
+			stateOfed.mergeImagePullSecrets(cr)
+			Expect(cr.Spec.OFEDDriver.ImageSpec.ImagePullSecrets).To(And(
+				HaveLen(6),
+				ContainElements("A", "B", "C", "1", "2", "3")))
+		})
+		It("Merge ImagePullSecrets - no init container config", func() {
+			cr := &v1alpha1.NicClusterPolicy{
+				Spec: v1alpha1.NicClusterPolicySpec{
+					OFEDDriver: &v1alpha1.OFEDDriverSpec{
+						ImageSpec: v1alpha1.ImageSpec{
+							ImagePullSecrets: []string{"1", "2", "3"},
+						},
+					},
+				},
+			}
+			stateOfed.mergeImagePullSecrets(cr)
+			Expect(cr.Spec.OFEDDriver.ImageSpec.ImagePullSecrets).To(And(
+				HaveLen(3),
+				ContainElements("1", "2", "3")))
+		})
+		It("getInitContainerConfig", func() {
+			cr := &v1alpha1.NicClusterPolicy{
+				Spec: v1alpha1.NicClusterPolicySpec{
+					OFEDDriver: &v1alpha1.OFEDDriverSpec{
+						OfedUpgradePolicy: &v1alpha1.DriverUpgradePolicySpec{
+							AutoUpgrade: true,
+							SafeLoad:    true,
+						},
+						InitContainer: &v1alpha1.InitContainerSpec{
+							Enable: true,
+							ImageSpec: v1alpha1.ImageSpec{
+								Image:      "image",
+								Repository: "repository",
+								Version:    "version",
+							},
+						},
+					},
+				},
+			}
+			cfg := stateOfed.getInitContainerConfig(cr, testLogger)
+			Expect(cfg.SafeLoadAnnotation).NotTo(BeEmpty())
+			Expect(cfg.SafeLoadEnable).To(BeTrue())
+			Expect(cfg.InitContainerEnable).To(BeTrue())
+			Expect(cfg.InitContainerImageName).To(Equal("repository/image:version"))
+		})
+	})
 	Context("Proxy config", func() {
 		It("Set Proxy from Cluster Wide Proxy", func() {
 			cr := &v1alpha1.NicClusterPolicy{

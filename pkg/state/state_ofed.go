@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/NVIDIA/k8s-operator-libs/pkg/upgrade"
 	"github.com/go-logr/logr"
 	osconfigv1 "github.com/openshift/api/config/v1"
 	"github.com/pkg/errors"
@@ -137,12 +138,20 @@ type additionalVolumeMounts struct {
 	Volumes      []v1.Volume
 }
 
+type initContainerConfig struct {
+	InitContainerEnable    bool
+	InitContainerImageName string
+	SafeLoadEnable         bool
+	SafeLoadAnnotation     string
+}
+
 type ofedRuntimeSpec struct {
 	runtimeSpec
-	CPUArch        string
-	OSName         string
-	OSVer          string
-	MOFEDImageName string
+	CPUArch             string
+	OSName              string
+	OSVer               string
+	MOFEDImageName      string
+	InitContainerConfig initContainerConfig
 	// is true if cluster type is Openshift
 	IsOpenshift bool
 }
@@ -440,15 +449,18 @@ func (s *stateOFED) getManifestObjects(
 		}
 	}
 
+	s.mergeImagePullSecrets(cr)
+
 	renderData := &ofedManifestRenderData{
 		CrSpec: cr.Spec.OFEDDriver,
 		RuntimeSpec: &ofedRuntimeSpec{
-			runtimeSpec:    runtimeSpec{config.FromEnv().State.NetworkOperatorResourceNamespace},
-			CPUArch:        nodeAttr[nodeinfo.AttrTypeCPUArch],
-			OSName:         nodeAttr[nodeinfo.AttrTypeOSName],
-			OSVer:          nodeAttr[nodeinfo.AttrTypeOSVer],
-			MOFEDImageName: s.getMofedDriverImageName(cr, nodeAttr, reqLogger),
-			IsOpenshift:    clusterInfo.IsOpenshift(),
+			runtimeSpec:         runtimeSpec{config.FromEnv().State.NetworkOperatorResourceNamespace},
+			CPUArch:             nodeAttr[nodeinfo.AttrTypeCPUArch],
+			OSName:              nodeAttr[nodeinfo.AttrTypeOSName],
+			OSVer:               nodeAttr[nodeinfo.AttrTypeOSVer],
+			MOFEDImageName:      s.getMofedDriverImageName(cr, nodeAttr, reqLogger),
+			InitContainerConfig: s.getInitContainerConfig(cr, reqLogger),
+			IsOpenshift:         clusterInfo.IsOpenshift(),
 		},
 		Tolerations:            cr.Spec.Tolerations,
 		NodeAffinity:           cr.Spec.NodeAffinity,
@@ -462,6 +474,56 @@ func (s *stateOFED) getManifestObjects(
 	}
 	reqLogger.V(consts.LogLevelDebug).Info("Rendered", "objects:", objs)
 	return objs, nil
+}
+
+// add pull secrets from the init container to the pull secrets list of the main container,
+// this list will be used as imagePullSecrets on the Pod level
+func (s *stateOFED) mergeImagePullSecrets(cr *mellanoxv1alpha1.NicClusterPolicy) {
+	if cr.Spec.OFEDDriver.InitContainer == nil {
+		return
+	}
+	if len(cr.Spec.OFEDDriver.InitContainer.ImagePullSecrets) == 0 {
+		return
+	}
+	secretesToAdd := make([]string, 0, len(cr.Spec.OFEDDriver.InitContainer.ImagePullSecrets))
+	for _, initSecret := range cr.Spec.OFEDDriver.InitContainer.ImagePullSecrets {
+		found := false
+		for _, mainSecret := range cr.Spec.OFEDDriver.ImagePullSecrets {
+			if initSecret == mainSecret {
+				found = true
+				break
+			}
+		}
+		if !found {
+			secretesToAdd = append(secretesToAdd, initSecret)
+		}
+	}
+	cr.Spec.OFEDDriver.ImagePullSecrets = append(cr.Spec.OFEDDriver.ImagePullSecrets, secretesToAdd...)
+}
+
+// prepare configuration for the init container
+func (s *stateOFED) getInitContainerConfig(
+	cr *mellanoxv1alpha1.NicClusterPolicy, reqLogger logr.Logger) initContainerConfig {
+	var initContCfg initContainerConfig
+	safeLoadEnable := cr.Spec.OFEDDriver.OfedUpgradePolicy != nil &&
+		cr.Spec.OFEDDriver.OfedUpgradePolicy.AutoUpgrade &&
+		cr.Spec.OFEDDriver.OfedUpgradePolicy.SafeLoad
+	if cr.Spec.OFEDDriver.InitContainer != nil {
+		initContCfg = initContainerConfig{
+			InitContainerEnable: cr.Spec.OFEDDriver.InitContainer.Enable,
+			InitContainerImageName: cr.Spec.OFEDDriver.InitContainer.Repository + "/" +
+				cr.Spec.OFEDDriver.InitContainer.Image + ":" +
+				cr.Spec.OFEDDriver.InitContainer.Version,
+			SafeLoadEnable:     safeLoadEnable,
+			SafeLoadAnnotation: upgrade.GetUpgradeDriverWaitForSafeLoadAnnotationKey(),
+		}
+	}
+
+	if safeLoadEnable && !initContCfg.InitContainerEnable {
+		reqLogger.V(consts.LogLevelWarning).Info("safe driver loading feature is enabled, but init container is" +
+			"disabled. It is required to enable init container to use safe driver loading feature.")
+	}
+	return initContCfg
 }
 
 // getMofedDriverImageName generates MOFED driver image name based on the driver version specified in CR

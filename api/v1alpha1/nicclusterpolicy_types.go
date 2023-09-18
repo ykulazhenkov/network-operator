@@ -69,7 +69,7 @@ type ConfigMapNameReference struct {
 
 // InitContainerSpec contains configuration for the init container of the OFED driver
 type InitContainerSpec struct {
-	// Enable indicates if init container deployment is requried
+	// Enable indicates if init container deployment is required
 	// +optional
 	// +kubebuilder:default:=false
 	Enable    bool `json:"enable,omitempty"`

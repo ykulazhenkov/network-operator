@@ -464,7 +464,7 @@ spec:
                       enable:
                         default: false
                         description: Enable indicates if init container deployment
-                          is requried
+                          is required
                         type: boolean
                       image:
                         pattern: '[a-zA-Z0-9\-]+'
