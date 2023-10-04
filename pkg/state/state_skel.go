@@ -255,7 +255,7 @@ func (s *stateSkel) handleStateObjectsDeletion(ctx context.Context) (SyncState, 
 	reqLogger := log.FromContext(ctx)
 	reqLogger.V(consts.LogLevelInfo).Info(
 		"State spec in CR is nil, deleting existing objects if needed", "State:", s.name)
-	found, err := s.deleteStateRelatedObjects(ctx)
+	found, err := s.deleteStateRelatedObjects(ctx, stateObjects{})
 	if err != nil {
 		return SyncStateError, errors.Wrap(err, "failed to delete k8s objects")
 	}
@@ -266,12 +266,48 @@ func (s *stateSkel) handleStateObjectsDeletion(ctx context.Context) (SyncState, 
 	return SyncStateIgnore, nil
 }
 
-func (s *stateSkel) deleteStateRelatedObjects(ctx context.Context) (bool, error) {
+// remove stale object of the state, returns boolean which indicates if removal is in progress and
+// an error if failed to remove an object
+func (s *stateSkel) handleStaleStateObjects(ctx context.Context,
+	currentObjs []*unstructured.Unstructured) (bool, error) {
+	reqLogger := log.FromContext(ctx)
+	reqLogger.V(consts.LogLevelInfo).Info(
+		"check state for stale objects", "State:", s.name)
+	objsToKeep := stateObjects{}
+	for _, o := range currentObjs {
+		gvkMap := objsToKeep[o.GroupVersionKind()]
+		if gvkMap == nil {
+			gvkMap = make(map[types.NamespacedName]struct{})
+		}
+		gvkMap[types.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}] = struct{}{}
+		objsToKeep[o.GroupVersionKind()] = gvkMap
+	}
+	found, err := s.deleteStateRelatedObjects(ctx, objsToKeep)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to delete k8s objects")
+	}
+	if found {
+		reqLogger.V(consts.LogLevelInfo).Info("removal of the state stale objects is in progress ",
+			"State:", s.name)
+		return true, nil
+	}
+	reqLogger.V(consts.LogLevelInfo).Info("no stale objects detected", "State:", s.name)
+	return false, nil
+}
+
+// is a mapping where GVK is a key and a map(set) with NamespacedNames is a value
+type stateObjects map[schema.GroupVersionKind]map[types.NamespacedName]struct{}
+
+func (s *stateSkel) deleteStateRelatedObjects(ctx context.Context, stateObjectsToKeep stateObjects) (bool, error) {
 	stateLabel := map[string]string{
 		consts.StateLabel: s.name,
 	}
 	found := false
 	for _, gvk := range getSupportedGVKs() {
+		typeObjectsToKeep := stateObjectsToKeep[gvk]
+		if typeObjectsToKeep == nil {
+			typeObjectsToKeep = make(map[types.NamespacedName]struct{})
+		}
 		l := &unstructured.UnstructuredList{}
 		l.SetGroupVersionKind(gvk)
 		err := s.client.List(ctx, l, client.MatchingLabels(stateLabel))
@@ -281,11 +317,14 @@ func (s *stateSkel) deleteStateRelatedObjects(ctx context.Context) (bool, error)
 		if err != nil {
 			return false, err
 		}
-		if len(l.Items) > 0 {
-			found = true
-		}
 		for _, obj := range l.Items {
 			obj := obj
+			if _, shouldKeep := typeObjectsToKeep[types.NamespacedName{
+				Name:      obj.GetName(),
+				Namespace: obj.GetNamespace()}]; shouldKeep {
+				continue
+			}
+			found = true
 			if obj.GetDeletionTimestamp() == nil {
 				err := s.client.Delete(ctx, &obj)
 				if err != nil {
