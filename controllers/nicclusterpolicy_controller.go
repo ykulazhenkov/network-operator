@@ -24,6 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -261,6 +262,9 @@ func setOFEDWaitLabel(ctx context.Context, c client.Client, node, value string) 
 //nolint:dupl
 func (r *NicClusterPolicyReconciler) updateCrStatus(
 	ctx context.Context, cr *mellanoxv1alpha1.NicClusterPolicy, status state.Results) {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "updateCrStatus")
+	defer span.End()
 	reqLogger := log.FromContext(ctx)
 NextResult:
 	for _, stateStatus := range status.StatesStatus {
@@ -286,6 +290,7 @@ NextResult:
 	if err != nil {
 		reqLogger.V(consts.LogLevelError).Error(err, "Failed to update CR status")
 	}
+	span.SetAttributes(attribute.String("syncStatus", string(status.Status)))
 }
 
 func (r *NicClusterPolicyReconciler) handleUnsupportedInstance(
