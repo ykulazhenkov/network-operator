@@ -27,7 +27,7 @@ import (
 	netattdefv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	osconfigv1 "github.com/openshift/api/config/v1"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
@@ -96,7 +96,7 @@ func setupOTelSDK(ctx context.Context, serviceName, serviceVersion string) (
 	}
 
 	// Setup trace provider.
-	tracerProvider, err := newTraceProvider(res)
+	tracerProvider, err := newTraceProvider(ctx, res)
 	if err != nil {
 		handleErr(err)
 		return
@@ -115,9 +115,8 @@ func newResource(serviceName, serviceVersion string) (*resource.Resource, error)
 		))
 }
 
-func newTraceProvider(res *resource.Resource) (*trace.TracerProvider, error) {
-	traceExporter, err := stdouttrace.New(
-		stdouttrace.WithPrettyPrint())
+func newTraceProvider(ctx context.Context, res *resource.Resource) (*trace.TracerProvider, error) {
+	traceExporter, err := otlptracehttp.New(ctx)
 	if err != nil {
 		return nil, err
 	}
