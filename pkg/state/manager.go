@@ -19,6 +19,7 @@ package state
 import (
 	"context"
 
+	"go.opentelemetry.io/otel/trace"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -78,6 +79,10 @@ func (smgr *stateManager) GetWatchSources() []*source.Kind {
 
 // SyncState attempts to reconcile the system by invoking Sync on each of the states
 func (smgr *stateManager) SyncState(ctx context.Context, customResource interface{}, infoCatalog InfoCatalog) Results {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "SyncState")
+	defer span.End()
+
 	reqLogger := log.FromContext(ctx)
 	reqLogger.V(consts.LogLevelInfo).Info("Syncing system state")
 
@@ -85,21 +90,25 @@ func (smgr *stateManager) SyncState(ctx context.Context, customResource interfac
 		Status: SyncStateNotReady,
 	}
 	statesReady := true
-
 	for _, state := range smgr.states {
-		reqLogger.V(consts.LogLevelInfo).Info("Sync State", "Name", state.Name(), "Description", state.Description())
-		stateCtx := log.IntoContext(ctx, reqLogger.WithName("state").WithName(state.Name()))
-		ss, err := state.Sync(stateCtx, customResource, infoCatalog)
-		result := Result{StateName: state.Name(), Status: ss, ErrInfo: err}
-		managerResult.StatesStatus = append(managerResult.StatesStatus, result)
+		func() {
+			state := state
+			_, stateSpan := span.TracerProvider().Tracer("").Start(ctx, state.Name())
+			defer stateSpan.End()
+			reqLogger.V(consts.LogLevelInfo).Info("Sync State", "Name", state.Name(), "Description", state.Description())
+			stateCtx := log.IntoContext(ctx, reqLogger.WithName("state").WithName(state.Name()))
+			ss, err := state.Sync(stateCtx, customResource, infoCatalog)
+			result := Result{StateName: state.Name(), Status: ss, ErrInfo: err}
+			managerResult.StatesStatus = append(managerResult.StatesStatus, result)
 
-		if result.Status == SyncStateNotReady || result.Status == SyncStateError {
-			statesReady = false
-		}
+			if result.Status == SyncStateNotReady || result.Status == SyncStateError {
+				statesReady = false
+			}
 
-		if result.ErrInfo != nil {
-			reqLogger.V(consts.LogLevelWarning).Error(result.ErrInfo, "Error while syncing state")
-		}
+			if result.ErrInfo != nil {
+				reqLogger.V(consts.LogLevelWarning).Error(result.ErrInfo, "Error while syncing state")
+			}
+		}()
 	}
 
 	if statesReady {

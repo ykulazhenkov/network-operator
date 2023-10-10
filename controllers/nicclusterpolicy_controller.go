@@ -24,13 +24,12 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -92,9 +91,9 @@ type NicClusterPolicyReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *NicClusterPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, span := tracer.Start(ctx, "Reconcile")
+	var span trace.Span
+	ctx, span = tracer.Start(ctx, "Reconcile")
 	defer span.End()
-	span.SetAttributes(attribute.String("reconcile.id", string(uuid.NewUUID())))
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger.V(consts.LogLevelInfo).Info("Reconciling NicClusterPolicy")
@@ -118,6 +117,7 @@ func (r *NicClusterPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		reqLogger.V(consts.LogLevelError).Error(err, "Error occurred on GET CRD request from API server.")
 		return reconcile.Result{}, err
 	}
+	span.AddEvent("NicClusterPolicy instance retrieved")
 
 	if req.Name != consts.NicClusterPolicyResourceName {
 		err := r.handleUnsupportedInstance(ctx, instance)
@@ -149,12 +149,15 @@ func (r *NicClusterPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	// Sync state and update status
 	managerStatus := r.stateManager.SyncState(ctx, instance, sc)
+	span.AddEvent("states handeled")
 	r.updateCrStatus(ctx, instance, managerStatus)
+	span.AddEvent("CR status updated")
 
 	err = r.handleMOFEDWaitLabels(ctx, instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+	span.AddEvent("OFED labels handeled")
 
 	if managerStatus.Status != state.SyncStateReady {
 		return reconcile.Result{
