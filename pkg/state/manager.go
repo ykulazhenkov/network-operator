@@ -93,10 +93,10 @@ func (smgr *stateManager) SyncState(ctx context.Context, customResource interfac
 	for _, state := range smgr.states {
 		func() {
 			state := state
-			_, stateSpan := span.TracerProvider().Tracer("").Start(ctx, state.Name())
+			stateCtx, stateSpan := span.TracerProvider().Tracer("").Start(ctx, state.Name())
 			defer stateSpan.End()
 			reqLogger.V(consts.LogLevelInfo).Info("Sync State", "Name", state.Name(), "Description", state.Description())
-			stateCtx := log.IntoContext(ctx, reqLogger.WithName("state").WithName(state.Name()))
+			stateCtx = log.IntoContext(stateCtx, reqLogger.WithName("state").WithName(state.Name()))
 			ss, err := state.Sync(stateCtx, customResource, infoCatalog)
 			result := Result{StateName: state.Name(), Status: ss, ErrInfo: err}
 			managerResult.StatesStatus = append(managerResult.StatesStatus, result)

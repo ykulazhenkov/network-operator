@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/trace"
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -144,6 +145,9 @@ func getSupportedGVKs() []schema.GroupVersionKind {
 }
 
 func (s *stateSkel) getObj(ctx context.Context, obj *unstructured.Unstructured) error {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "getObj")
+	defer span.End()
 	reqLogger := log.FromContext(ctx)
 	reqLogger.V(consts.LogLevelInfo).Info("Get Object", "Namespace:", obj.GetNamespace(), "Name:", obj.GetName())
 
@@ -157,6 +161,9 @@ func (s *stateSkel) getObj(ctx context.Context, obj *unstructured.Unstructured) 
 }
 
 func (s *stateSkel) createObj(ctx context.Context, obj *unstructured.Unstructured) error {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "createObj")
+	defer span.End()
 	reqLogger := log.FromContext(ctx)
 
 	s.checkDeleteSupported(ctx, obj)
@@ -173,6 +180,9 @@ func (s *stateSkel) createObj(ctx context.Context, obj *unstructured.Unstructure
 }
 
 func (s *stateSkel) checkDeleteSupported(ctx context.Context, obj *unstructured.Unstructured) {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "checkDeleteSupported")
+	defer span.End()
 	reqLogger := log.FromContext(ctx)
 
 	for _, gvk := range getSupportedGVKs() {
@@ -186,6 +196,9 @@ func (s *stateSkel) checkDeleteSupported(ctx context.Context, obj *unstructured.
 }
 
 func (s *stateSkel) updateObj(ctx context.Context, obj *unstructured.Unstructured) error {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "updateObj")
+	defer span.End()
 	reqLogger := log.FromContext(ctx)
 	reqLogger.V(consts.LogLevelInfo).Info("Updating Object", "Namespace:", obj.GetNamespace(), "Name:", obj.GetName())
 
@@ -203,6 +216,9 @@ func (s *stateSkel) createOrUpdateObjs(
 	ctx context.Context,
 	setControllerReference func(obj *unstructured.Unstructured) error,
 	objs []*unstructured.Unstructured) error {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "createOrUpdateObjs")
+	defer span.End()
 	reqLogger := log.FromContext(ctx)
 	for _, desiredObj := range objs {
 		reqLogger.V(consts.LogLevelInfo).Info("Handling manifest object", "Kind:", desiredObj.GetKind(),
@@ -252,6 +268,9 @@ func (s *stateSkel) addStateSpecificLabels(obj *unstructured.Unstructured) {
 }
 
 func (s *stateSkel) handleStateObjectsDeletion(ctx context.Context) (SyncState, error) {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "handleStateObjectsDeletion")
+	defer span.End()
 	reqLogger := log.FromContext(ctx)
 	reqLogger.V(consts.LogLevelInfo).Info(
 		"State spec in CR is nil, deleting existing objects if needed", "State:", s.name)
@@ -289,6 +308,9 @@ func (s stateObjects) Exist(gvk schema.GroupVersionKind, name types.NamespacedNa
 // an error if failed to remove an object
 func (s *stateSkel) handleStaleStateObjects(ctx context.Context,
 	desiredObjs []*unstructured.Unstructured) (bool, error) {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "handleStaleStateObjects")
+	defer span.End()
 	reqLogger := log.FromContext(ctx)
 	reqLogger.V(consts.LogLevelInfo).Info(
 		"check state for stale objects", "State:", s.name)
@@ -310,6 +332,9 @@ func (s *stateSkel) handleStaleStateObjects(ctx context.Context,
 }
 
 func (s *stateSkel) deleteStateRelatedObjects(ctx context.Context, stateObjectsToKeep stateObjects) (bool, error) {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "deleteStateRelatedObjects")
+	defer span.End()
 	stateLabel := map[string]string{
 		consts.StateLabel: s.name,
 	}
@@ -384,6 +409,9 @@ func (s *stateSkel) mergeServiceAccount(updated, current *unstructured.Unstructu
 
 // Iterate over objects and check for their readiness
 func (s *stateSkel) getSyncState(ctx context.Context, objs []*unstructured.Unstructured) (SyncState, error) {
+	var span trace.Span
+	ctx, span = trace.SpanFromContext(ctx).TracerProvider().Tracer("").Start(ctx, "getSyncState")
+	defer span.End()
 	reqLogger := log.FromContext(ctx)
 	reqLogger.V(consts.LogLevelInfo).Info("Checking related object states")
 
